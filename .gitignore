@@ -1,0 +1,43 @@
+# Credenciales y configuración local
+.env
+
+# Config local de la app (usuario configurado + hora) -> credenciales.py
+config.json
+
+# Entorno virtual
+.venv/
+
+# Perfil persistente de Playwright (sesión de login) -> abrir_contexto() usa profile/
+profile/
+
+# Screenshots y salida de diagnóstico -> shot() escribe en debug/
+debug/
+
+# Carpetas de salida (este proyecto NO versiona datos)
+output/
+
+# Registros de notas dejadas (listan expedientes = dato, nunca al repo)
+registros/
+
+# PDFs (por si llegaran a generarse)
+*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Distribución / packaging
+dist/
+build/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini
