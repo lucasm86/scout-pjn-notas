@@ -79,6 +79,17 @@ def hora_configurada():
     return leer_config().get("hora") or None
 
 
+def auto_update_activado() -> bool:
+    """True si la autoactualización está habilitada (default: sí)."""
+    return leer_config().get("auto_update", True)
+
+
+def set_auto_update(activado: bool) -> None:
+    cfg = leer_config()
+    cfg["auto_update"] = bool(activado)
+    guardar_config(cfg)
+
+
 def esta_configurado() -> bool:
     """True si hay un usuario configurado Y su contraseña está en el almacén."""
     user = usuario_configurado()

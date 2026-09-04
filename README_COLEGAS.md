@@ -70,13 +70,27 @@ Con eso ya está: **no tenés que abrir la app de nuevo**. Va a correr sola.
   **no inventa nada**: frena y lo anota. Volvé a abrir la app y hacé
   **"Probar login"** para renovar la sesión.
 
-## 6. Tu contraseña
+## 6. Actualizaciones (automáticas)
+
+Desde la **v1.2.0**, la app se **actualiza sola**:
+
+- Las **corridas automáticas** de martes y viernes, antes de trabajar, revisan si
+  hay una versión nueva y, si la hay, se actualizan solas y siguen con la nueva.
+- Cuando **abrís la ventana**, si hay una versión nueva la instala en el momento
+  (una ventanita "Actualizando…") y se reinicia.
+- Podés apagarlo con el tilde **"Actualizar la app automáticamente"** en la ventana.
+
+> Cada actualización se baja de GitHub y se verifica con su **checksum (SHA256)**
+> antes de aplicarse. Si venís de una versión anterior a la 1.2.0, bajá **una vez**
+> la 1.2.0 desde Releases; de ahí en más se actualiza sola.
+
+## 7. Tu contraseña
 
 Se guarda en el **Administrador de credenciales de Windows** (cifrado por tu
 usuario), nunca en texto plano. Nadie más que vos (en tu sesión de Windows) puede
 leerla.
 
-## 7. ¿Algo no anda? (soporte)
+## 8. ¿Algo no anda? (soporte)
 
 Abrí una terminal donde está el `.exe` y corré:
 

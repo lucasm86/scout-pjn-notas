@@ -76,6 +76,46 @@ def _correr_robot(visible: bool, simulacro: bool = False) -> int:
     return ejecutar(visible=visible, verboso=False, simulacro=simulacro)
 
 
+def _autoupdate_headless(args_relanzar) -> bool:
+    """En corridas headless: si hay versión nueva y auto-update está ON, la baja,
+    la aplica y relanza con `args_relanzar`. Devuelve True si lanzó el reemplazo
+    (el caller debe salir sin trabajar; la versión nueva hará el trabajo)."""
+    import credenciales
+    if not credenciales.auto_update_activado():
+        return False
+    import actualizar
+    info = actualizar.hay_actualizacion()
+    if not info:
+        return False
+    print(f"Hay una versión nueva ({info['tag']}). Actualizando antes de correr...", flush=True)
+    ok, nuevo, msg = actualizar.descargar_y_verificar(
+        info, on_linea=lambda l: print("  " + l, flush=True))
+    print(msg, flush=True)
+    if not ok:
+        return False  # si falla el update, seguimos con la versión actual
+    ok2, msg2 = actualizar.aplicar_y_relanzar(nuevo, args_relanzar)
+    print(msg2, flush=True)
+    return ok2
+
+
+def _update_manual() -> int:
+    """Modo --update: busca, baja, verifica y aplica una actualización."""
+    import acerca
+    import actualizar
+    info = actualizar.hay_actualizacion()
+    if not info:
+        print(f"Ya tenés la última versión (v{acerca.APP_VERSION}).", flush=True)
+        return 0
+    ok, nuevo, msg = actualizar.descargar_y_verificar(
+        info, on_linea=lambda l: print("  " + l, flush=True))
+    print(msg, flush=True)
+    if not ok:
+        return 1
+    ok2, msg2 = actualizar.aplicar_y_relanzar(nuevo, [])
+    print(msg2, flush=True)
+    return 0 if ok2 else 1
+
+
 def _check() -> int:
     """Autotest del empaquetado (no toca el portal): confirma que arranca el
     Chromium embebido y que el almacén seguro (keyring) responde."""
@@ -140,15 +180,23 @@ def main():
                     help="autotest: confirma que el navegador y las credenciales funcionan.")
     ap.add_argument("--instalar-navegador", action="store_true",
                     help="descarga Chromium (si falta) y termina. Útil para preinstalar.")
+    ap.add_argument("--update", action="store_true",
+                    help="busca e instala una actualización y termina.")
+    ap.add_argument("--updated", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     if args.instalar_navegador:
         sys.exit(0 if _asegurar_chromium() else 1)
+    if args.update:
+        sys.exit(_update_manual())
     if args.check:
         sys.exit(_check())
     if args.simulacro:
         sys.exit(_correr_robot(visible=args.ver, simulacro=True))
     if args.run:
+        # Corrida agendada: primero se autoactualiza (si corresponde) y relanza.
+        if not args.updated and _autoupdate_headless(["--run", "--updated"]):
+            return  # salimos: la versión nueva hará el trabajo tras el reemplazo
         sys.exit(_correr_robot(visible=False))
     if args.ahora:
         sys.exit(_correr_robot(visible=True))

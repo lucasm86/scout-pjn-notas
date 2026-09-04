@@ -34,8 +34,41 @@ HORA_POR_DEFECTO = "09:00"
 
 
 def abrir():
-    """Abre la ventana de configuración (bloquea hasta que se cierra)."""
+    """Abre la ventana de configuración (bloquea hasta que se cierra).
+    Antes, si corresponde, se autoactualiza (al inicio, para no interrumpir al
+    colega mientras escribe)."""
+    if rutas.esta_congelado() and credenciales.auto_update_activado():
+        if _autoupdate_gui():
+            return  # se lanzó el reemplazo del .exe: este proceso termina
     _App().mainloop()
+
+
+def _autoupdate_gui() -> bool:
+    """Si hay versión nueva, la descarga con una ventanita de progreso y aplica
+    el reemplazo. Devuelve True si lanzó el reemplazo (hay que salir)."""
+    import actualizar
+    info = actualizar.hay_actualizacion()
+    if not info:
+        return False
+    win = tk.Tk()
+    win.title("Actualizando")
+    win.resizable(False, False)
+    m = ttk.Frame(win, padding=18)
+    m.grid()
+    ttk.Label(m, text=f"Instalando la versión nueva ({info['tag']})…",
+              font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
+    lbl = ttk.Label(m, text="Descargando…")
+    lbl.grid(row=1, column=0, sticky="w", pady=(8, 0))
+    win.update()
+
+    ok, nuevo, _msg = actualizar.descargar_y_verificar(
+        info, on_linea=lambda l: (lbl.config(text=l), win.update()))
+    if ok:
+        actualizar.aplicar_y_relanzar(nuevo, [])
+        win.destroy()
+        return True
+    win.destroy()
+    return False
 
 
 def _comando_app(*flags):
@@ -100,9 +133,16 @@ class _App(tk.Tk):
                                   state="disabled", relief="flat", background="#f4f4f4")
         self.txt_estado.grid(row=6, column=0, columnspan=2, pady=(8, 0))
 
+        # Auto-actualización (toggle)
+        self.var_auto = tk.BooleanVar(value=credenciales.auto_update_activado())
+        ttk.Checkbutton(marco, text="Actualizar la app automáticamente",
+                        variable=self.var_auto,
+                        command=lambda: credenciales.set_auto_update(self.var_auto.get())
+                        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
         # Pie: descargar navegador + versión + "Acerca de..."
         pie = ttk.Frame(marco)
-        pie.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        pie.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.b_navegador = ttk.Button(pie, text="Descargar navegador",
                                       command=self._descargar_navegador)
         self.b_navegador.pack(side="left")

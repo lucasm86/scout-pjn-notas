@@ -7,7 +7,7 @@ de configuración, y debería coincidir con lo que dice el README y la LICENSE.
 """
 
 APP_NOMBRE = "Scout PJN — Dejar notas"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 REPO_URL = "https://github.com/lucasm86/scout-pjn-notas"
 
 # Descargo de responsabilidad. Lenguaje estándar de software libre + aclaración
