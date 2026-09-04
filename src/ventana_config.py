@@ -26,6 +26,7 @@ from tkinter import messagebox, ttk
 import acerca
 import agendar
 import credenciales
+import navegador
 import rutas
 import sesion
 
@@ -53,6 +54,8 @@ class _App(tk.Tk):
         self._cola = queue.Queue()
         self._construir()
         self._cargar_valores()
+        self.after(200, self._pump)         # atiende mensajes de hilos de fondo
+        self.after(300, self._chequear_navegador)
 
     # --------------------------- construcción UI ---------------------------
     def _construir(self):
@@ -97,11 +100,14 @@ class _App(tk.Tk):
                                   state="disabled", relief="flat", background="#f4f4f4")
         self.txt_estado.grid(row=6, column=0, columnspan=2, pady=(8, 0))
 
-        # Pie: versión + "Acerca de..."
+        # Pie: descargar navegador + versión + "Acerca de..."
         pie = ttk.Frame(marco)
         pie.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-        ttk.Label(pie, text=f"{acerca.APP_NOMBRE}  v{acerca.APP_VERSION}",
-                  foreground="#666").pack(side="left")
+        self.b_navegador = ttk.Button(pie, text="Descargar navegador",
+                                      command=self._descargar_navegador)
+        self.b_navegador.pack(side="left")
+        ttk.Label(pie, text=f"v{acerca.APP_VERSION}", foreground="#666").pack(
+            side="left", padx=10)
         ttk.Button(pie, text="Acerca de…", command=self._acerca).pack(side="right")
 
     def _cargar_valores(self):
@@ -129,6 +135,8 @@ class _App(tk.Tk):
         if not user or not pwd:
             messagebox.showwarning("Faltan datos", "Completá usuario y contraseña.")
             return
+        if not self._requiere_navegador():
+            return
         self._habilitar(False)
         self._estado("Probando login contra el portal del PJN...\n"
                      "Se abrirá una ventana del navegador. Si aparece un captcha o "
@@ -139,24 +147,35 @@ class _App(tk.Tk):
             self._cola.put(("probar", res))
 
         threading.Thread(target=tarea, daemon=True).start()
-        self.after(200, self._revisar_cola)
 
-    def _revisar_cola(self):
+    def _pump(self):
+        """Atiende mensajes de los hilos de fondo (login, descarga) y actualiza
+        la UI desde el hilo principal. Corre siempre mientras la ventana vive."""
         try:
-            tipo, res = self._cola.get_nowait()
+            while True:
+                tipo, dato = self._cola.get_nowait()
+                self._despachar(tipo, dato)
         except queue.Empty:
-            self.after(200, self._revisar_cola)
-            return
+            pass
+        self.after(200, self._pump)
+
+    def _despachar(self, tipo, dato):
         if tipo == "probar":
             self._habilitar(True)
-            self._estado(res["mensaje"])
-            if res["ok"]:
+            self._estado(dato["mensaje"])
+            if dato["ok"]:
                 # Login válido: guardamos la credencial ya, así no se pierde.
-                user, pwd, _ = self._valores()
-                credenciales.guardar_credencial(user, pwd)
+                user, _pwd, _ = self._valores()
+                credenciales.guardar_credencial(user, self.e_pwd.get())
                 cfg = credenciales.leer_config()
                 cfg["pjn_user"] = user
                 credenciales.guardar_config(cfg)
+        elif tipo == "nav_linea":
+            self._estado(f"Descargando el navegador (una sola vez)...\n{dato}")
+        elif tipo == "nav_fin":
+            ok, msg = dato
+            self._habilitar(True)
+            self._estado(msg)
 
     def _guardar(self):
         user, pwd, hora = self._valores()
@@ -176,6 +195,8 @@ class _App(tk.Tk):
             messagebox.showerror("Agendado", msg)
 
     def _correr_ahora(self):
+        if not self._requiere_navegador():
+            return
         if not credenciales.esta_configurado():
             resp = messagebox.askyesno(
                 "Sin guardar",
@@ -190,6 +211,8 @@ class _App(tk.Tk):
         subprocess.Popen(_comando_app("--ahora"))
 
     def _simular(self):
+        if not self._requiere_navegador():
+            return
         if not credenciales.esta_configurado():
             messagebox.showwarning(
                 "Sin configurar",
@@ -199,6 +222,44 @@ class _App(tk.Tk):
                      "navega y verifica los expedientes, pero nunca confirma. Mirá la ventana "
                      "del navegador; el resultado queda en la carpeta de registros.")
         subprocess.Popen(_comando_app("--simulacro", "--ver"))
+
+    # ---------------------------- navegador --------------------------------
+    def _requiere_navegador(self) -> bool:
+        """Si falta Chromium, avisa y frena la acción. True si está listo."""
+        if navegador.chromium_instalado():
+            return True
+        messagebox.showinfo(
+            "Falta el navegador",
+            "Primero descargá el navegador con el botón 'Descargar navegador' "
+            "(abajo a la izquierda). Es una sola vez.")
+        return False
+
+    def _chequear_navegador(self):
+        """Al abrir: si falta Chromium, ofrece descargarlo."""
+        if navegador.chromium_instalado():
+            return
+        if messagebox.askyesno(
+                "Falta el navegador",
+                "Para funcionar, la app necesita descargar el navegador (Chromium, "
+                "~150 MB). Es una sola vez y queda guardado. ¿Descargar ahora?"):
+            self._descargar_navegador()
+        else:
+            self._estado("⚠️ Falta el navegador. Usá 'Descargar navegador' antes de "
+                         "probar el login o correr.")
+
+    def _descargar_navegador(self):
+        if navegador.chromium_instalado():
+            self._estado("El navegador ya está instalado.")
+            return
+        self._habilitar(False)
+        self._estado("Descargando el navegador (~150 MB). Puede tardar unos minutos...")
+
+        def tarea():
+            ok, msg = navegador.instalar_chromium(
+                on_linea=lambda l: self._cola.put(("nav_linea", l)))
+            self._cola.put(("nav_fin", (ok, msg)))
+
+        threading.Thread(target=tarea, daemon=True).start()
 
     def _acerca(self):
         """Cartel 'Acerca de...' con el descargo y link al repositorio."""
@@ -223,7 +284,8 @@ class _App(tk.Tk):
     # ------------------------------ helpers UI -----------------------------
     def _habilitar(self, on):
         estado = "normal" if on else "disabled"
-        for b in (self.b_probar, self.b_guardar, self.b_simular, self.b_correr):
+        for b in (self.b_probar, self.b_guardar, self.b_simular, self.b_correr,
+                  self.b_navegador):
             b.config(state=estado)
 
     def _estado(self, msg):

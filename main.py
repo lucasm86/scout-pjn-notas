@@ -34,12 +34,16 @@ def _preparar_frozen():
     """Ajustes que solo aplican cuando corremos empaquetados en .exe."""
     if not rutas.esta_congelado():
         return
-    # 1) Chromium embebido: Playwright busca los browsers DENTRO del paquete
-    #    (así se instalan en el build con PLAYWRIGHT_BROWSERS_PATH=0).
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
-    # 2) Sin consola (app windowed), sys.stdout/err son None y cualquier print()
-    #    del robot rompería. Redirigimos toda la salida a un log en la carpeta de
-    #    datos, que además sirve para diagnosticar corridas agendadas.
+    # Chromium NO va embebido (desde v1.1): se descarga bajo demanda. En modo
+    # frozen, Playwright por defecto busca los browsers RELATIVO al paquete (un
+    # temp efímero), no en la ubicación estándar. Forzamos la ubicación estándar
+    # de Windows (%LOCALAPPDATA%\ms-playwright) para que detección, descarga y
+    # robot usen todos el MISMO lugar, estable entre corridas y actualizaciones.
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(base) / "ms-playwright")
+    # Sin consola (app windowed), sys.stdout/err son None y cualquier print() del
+    # robot rompería. Redirigimos toda la salida a un log en la carpeta de datos,
+    # que además sirve para diagnosticar corridas agendadas.
     try:
         log = open(rutas.dir_datos() / "app.log", "a", encoding="utf-8", buffering=1)
         sys.stdout = log
@@ -51,7 +55,23 @@ def _preparar_frozen():
 _preparar_frozen()
 
 
+def _asegurar_chromium() -> bool:
+    """Garantiza que Chromium esté disponible antes de correr el robot.
+    Si falta, lo descarga (una vez). Devuelve True si quedó listo."""
+    import navegador
+    if navegador.chromium_instalado():
+        return True
+    print("Falta el navegador; descargando Chromium (una sola vez, ~150 MB)...", flush=True)
+    ok, msg = navegador.instalar_chromium(on_linea=lambda l: print("  " + l, flush=True))
+    print(msg, flush=True)
+    return ok
+
+
 def _correr_robot(visible: bool, simulacro: bool = False) -> int:
+    if not _asegurar_chromium():
+        print(">>> ERROR: no se pudo preparar el navegador. Abrí la app y descargalo "
+              "a mano. <<<", flush=True)
+        return 1
     from dejar_notas import ejecutar
     return ejecutar(visible=visible, verboso=False, simulacro=simulacro)
 
@@ -62,17 +82,22 @@ def _check() -> int:
     lineas = []
     ok = True
 
-    # 1) Chromium embebido.
-    from playwright.sync_api import sync_playwright
-    try:
-        with sync_playwright() as p:
-            navegador = p.chromium.launch(headless=True)
-            navegador.new_page().goto("about:blank")
-            navegador.close()
-        lineas.append("✅ Chromium embebido OK.")
-    except Exception as e:
-        lineas.append(f"❌ Chromium NO arrancó: {type(e).__name__}: {e}")
-        ok = False
+    # 1) Navegador Chromium: presencia + que arranque (si está).
+    import navegador as nav
+    if not nav.chromium_instalado():
+        lineas.append("⚠️ Navegador (Chromium) NO instalado. Se descarga solo al "
+                      "abrir la app o en la primera corrida.")
+    else:
+        from playwright.sync_api import sync_playwright
+        try:
+            with sync_playwright() as p:
+                b = p.chromium.launch(headless=True)
+                b.new_page().goto("about:blank")
+                b.close()
+            lineas.append("✅ Navegador (Chromium) instalado y arranca OK.")
+        except Exception as e:
+            lineas.append(f"❌ Chromium instalado pero NO arrancó: {type(e).__name__}: {e}")
+            ok = False
 
     # 2) Almacén de credenciales (keyring / Credential Manager).
     try:
@@ -112,9 +137,13 @@ def main():
     ap.add_argument("--ver", action="store_true",
                     help="con --simulacro: muestra la ventana del navegador.")
     ap.add_argument("--check", action="store_true",
-                    help="autotest: confirma que el Chromium embebido funciona.")
+                    help="autotest: confirma que el navegador y las credenciales funcionan.")
+    ap.add_argument("--instalar-navegador", action="store_true",
+                    help="descarga Chromium (si falta) y termina. Útil para preinstalar.")
     args = ap.parse_args()
 
+    if args.instalar_navegador:
+        sys.exit(0 if _asegurar_chromium() else 1)
     if args.check:
         sys.exit(_check())
     if args.simulacro:

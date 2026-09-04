@@ -2,16 +2,16 @@
 #
 #   .\.venv\Scripts\pyinstaller.exe build.spec --noconfirm
 #
-# Requisitos previos (una vez):
-#   PLAYWRIGHT_BROWSERS_PATH=0  playwright install chromium
-#   (así el Chromium queda DENTRO del paquete y se embebe en el .exe)
+# Desde v1.1 el .exe NO trae el navegador embebido: Chromium se descarga bajo
+# demanda la primera vez (ver src/navegador.py) a %LOCALAPPDATA%\ms-playwright.
+# Por eso el .exe pesa ~50 MB en vez de ~350 MB.
 #
-# Resultado: dist/ScoutPJN-DejarNotas.exe (~150-250 MB, onefile).
+# Resultado: dist/ScoutPJN-DejarNotas.exe (onefile, windowed).
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 datas, binaries, hiddenimports = [], [], []
 
-# Playwright + Chromium embebido (driver node + .local-browsers).
+# Playwright (driver node) + keyring.
 for paquete in ("playwright", "keyring"):
     d, b, h = collect_all(paquete)
     datas += d
@@ -33,7 +33,7 @@ hiddenimports += [
 
 # Nuestros módulos viven en src/ y tests/ y se importan por ruta (no como paquete).
 hiddenimports += [
-    "rutas", "credenciales", "acerca", "agendar", "sesion",
+    "rutas", "credenciales", "acerca", "agendar", "sesion", "navegador",
     "utils_pagina", "ventana_config", "dejar_notas", "probe_notas", "smoke_test",
 ]
 
@@ -49,6 +49,18 @@ a = Analysis(
     noarchive=False,
 )
 
+
+# Los navegadores de Playwright (.local-browsers) NO van en el .exe. PyInstaller
+# los junta al analizar el paquete aunque no los pidamos, así que los sacamos del
+# TOC final. Esto hace el build reproducible sin importar si el paquete tiene o no
+# browsers instalados en disco.
+def _sin_browsers(toc):
+    return [e for e in toc if ".local-browsers" not in str(e).replace("\\", "/").lower()]
+
+
+a.datas = _sin_browsers(a.datas)
+a.binaries = _sin_browsers(a.binaries)
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -61,7 +73,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,               # UPX puede corromper el Chromium embebido: desactivado.
+    upx=False,               # UPX puede corromper binarios: desactivado.
     runtime_tmpdir=None,
     console=False,           # app windowed: sin consola. La salida va a app.log.
     disable_windowed_traceback=False,

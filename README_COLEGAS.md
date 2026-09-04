@@ -22,7 +22,11 @@ elijas. No necesitás instalar Python ni nada: es un solo archivo `.exe`.
 
 ## 2. Configuración (primera vez)
 
-Hacé **doble clic** en el `.exe`. Se abre la ventana de configuración:
+Hacé **doble clic** en el `.exe`. Se abre la ventana de configuración.
+
+> **La primera vez**, la app te va a ofrecer descargar el **navegador**
+> (Chromium, ~150 MB). Aceptá: es **una sola vez**, queda guardado y no se
+> vuelve a bajar aunque actualices la app. Necesitás internet para ese paso.
 
 1. Escribí tu **usuario (CUIL)** y tu **contraseña** del PJN.
 2. Clic en **"Probar login"**. Se abre un navegador y valida tu ingreso:
